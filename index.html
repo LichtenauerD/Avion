@@ -144,7 +144,18 @@ footer a{color:inherit}
 {
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const RADIUS_NM=35, POLL_MS=6000;
+const RADIUS_NM=35, POLL_MS=8000;
+/* Les API ADS-B publiques n'autorisent pas les appels depuis un navigateur (pas d'en-tête CORS).
+   Les requêtes passent donc par un relais. PROXY : adresse de ton Worker Cloudflare (voir worker.js),
+   le plus fiable. Sans lui, la page tente des relais publics gratuits, plus lents et parfois saturés. */
+const PROXY='';
+const ROUTES=[
+  PROXY&&{n:'relais perso',w:u=>PROXY.replace(/\/$/,'')+'/?url='+encodeURIComponent(u)},
+  {n:'relais codetabs',w:u=>'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u)},
+  {n:'relais allorigins',w:u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},
+  {n:'direct',w:u=>u}
+].filter(Boolean);
+let routeIdx=0;
 const SOURCES=[
   {n:'adsb.lol',u:(a,o,r)=>`https://api.adsb.lol/v2/point/${a}/${o}/${r}`},
   {n:'adsb.fi',u:(a,o,r)=>`https://opendata.adsb.fi/api/v2/lat/${a}/lon/${o}/dist/${r}`},
@@ -153,10 +164,19 @@ const SOURCES=[
 const DIRS=['nord','nord-est','est','sud-est','sud','sud-ouest','ouest','nord-ouest'];
 let me=null, list=[], sel=null, map=null, layers={}, tracks={}, info={}, timer=null, srcIdx=0, busy=false;
 
-async function getJSON(url,ms=8000){
+async function raw(url,ms){
   const c=new AbortController(), t=setTimeout(()=>c.abort(),ms);
-  try{const r=await fetch(url,{signal:c.signal});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}
+  try{const r=await fetch(url,{signal:c.signal,cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return JSON.parse(await r.text())}
   finally{clearTimeout(t)}
+}
+/* Essaie d'abord le relais qui a marché la dernière fois, puis les autres. */
+async function getJSON(url,ms=8000){
+  let err;
+  for(let k=0;k<ROUTES.length;k++){
+    const i=(routeIdx+k)%ROUTES.length;
+    try{const j=await raw(ROUTES[i].w(url),ms);routeIdx=i;return j}catch(e){err=e}
+  }
+  throw err||new Error('aucun relais');
 }
 async function nearby(){
   let err;
@@ -164,11 +184,14 @@ async function nearby(){
     const i=(srcIdx+k)%SOURCES.length, s=SOURCES[i];
     try{
       const j=await getJSON(s.u(me.lat.toFixed(4),me.lon.toFixed(4),RADIUS_NM));
-      srcIdx=i; $('src').textContent='via '+s.n;
-      return j.ac||j.aircraft||[];
+      const ac=j.ac||j.aircraft;
+      if(!Array.isArray(ac))throw new Error('réponse inattendue');
+      srcIdx=i; $('src').textContent='via '+s.n+' · '+ROUTES[routeIdx].n;
+      return ac;
     }catch(e){err=e}
   }
-  throw err||new Error('aucune source');
+  const x=new Error('Impossible de joindre les serveurs de données d\'avions pour le moment. Réessaie dans un instant.');
+  x.cause=err; throw x;
 }
 const rad=d=>d*Math.PI/180, deg=r=>r*180/Math.PI;
 function dist(a1,o1,a2,o2){const R=6371e3,dA=rad(a2-a1),dO=rad(o2-o1);const h=Math.sin(dA/2)**2+Math.cos(rad(a1))*Math.cos(rad(a2))*Math.sin(dO/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
@@ -246,7 +269,7 @@ function select(hex,fresh){
 function push(a){const t=tracks[a.hex],l=t[t.length-1];if(!l||l[0]!==a.lat||l[1]!==a.lon)t.push([a.lat,a.lon])}
 async function loadTrack(a){
   try{
-    const j=await getJSON(`https://opensky-network.org/api/tracks/all?icao24=${a.hex}&time=0`,6000);
+    const j=await getJSON(`https://opensky-network.org/api/tracks/all?icao24=${a.hex}&time=0`,7000);
     const p=(j.path||[]).filter(q=>q[1]!=null).map(q=>[q[1],q[2]]);
     if(p.length>1){tracks[a.hex]=p.concat(tracks[a.hex]);if(sel===a.hex)drawMap(a,info[a.hex+'|'+a.cs],false)}
   }catch(e){}
