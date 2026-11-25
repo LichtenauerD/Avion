@@ -144,7 +144,7 @@ footer a{color:inherit}
 {
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const RADIUS_NM=25, POLL_MS=6000;
+const RADIUS_NM=35, POLL_MS=6000;
 const SOURCES=[
   {n:'adsb.lol',u:(a,o,r)=>`https://api.adsb.lol/v2/point/${a}/${o}/${r}`},
   {n:'adsb.fi',u:(a,o,r)=>`https://opendata.adsb.fi/api/v2/lat/${a}/lon/${o}/dist/${r}`},
@@ -212,7 +212,7 @@ async function scan(){
     me=await locate();
     say('Je scrute le ciel…');
     list=airborne(await nearby());
-    if(!list.length){say('Aucun avion repéré dans un rayon de 45 km. Il est peut-être trop bas ou sans transpondeur visible.',true);busy=false;return}
+    if(!list.length){say('Aucun avion repéré dans un rayon de 65 km. Il est peut-être trop bas ou sans transpondeur visible.',true);busy=false;return}
     say('');
     select(list[0].hex,true);
   }catch(e){say(e.name==='AbortError'?'Le réseau répond trop lentement, réessaie.':(e.message||'Erreur réseau.'),true)}
