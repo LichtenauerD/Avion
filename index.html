@@ -135,7 +135,7 @@ footer a{color:inherit}
     <h2>Les autres avions autour</h2>
     <div id="others"></div>
   </section>
-  <footer>Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
+  <footer>Version 4 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
 </main>
 <div class="dock" id="dock" hidden><button id="again">J'en entends un autre</button></div>
 
@@ -144,7 +144,7 @@ footer a{color:inherit}
 {
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const RADIUS_NM=35, POLL_MS=8000;
+const RADIUS_NM=54, POLL_MS=8000;
 /* Les API ADS-B publiques n'autorisent pas les appels depuis un navigateur (pas d'en-tête CORS).
    Les requêtes passent donc par un relais. PROXY : adresse de ton Worker Cloudflare (voir worker.js),
    le plus fiable. Sans lui, la page tente des relais publics gratuits, plus lents et parfois saturés. */
@@ -153,6 +153,7 @@ const ROUTES=[
   PROXY&&{n:'relais perso',w:u=>PROXY.replace(/\/$/,'')+'/?url='+encodeURIComponent(u)},
   {n:'relais codetabs',w:u=>'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u)},
   {n:'relais allorigins',w:u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},
+  {n:'relais corsproxy',w:u=>'https://corsproxy.io/?url='+encodeURIComponent(u)},
   {n:'direct',w:u=>u}
 ].filter(Boolean);
 let routeIdx=0;
@@ -190,7 +191,7 @@ async function nearby(){
       return ac;
     }catch(e){err=e}
   }
-  const x=new Error('Impossible de joindre les serveurs de données d\'avions pour le moment. Réessaie dans un instant.');
+  const x=new Error('Impossible de joindre les serveurs de données d\'avions pour le moment ('+(err&&err.name==='AbortError'?'délai dépassé':(err&&err.message)||'?')+'). Réessaie dans un instant.');
   x.cause=err; throw x;
 }
 const rad=d=>d*Math.PI/180, deg=r=>r*180/Math.PI;
@@ -235,7 +236,7 @@ async function scan(){
     me=await locate();
     say('Je scrute le ciel…');
     list=airborne(await nearby());
-    if(!list.length){say('Aucun avion repéré dans un rayon de 65 km. Il est peut-être trop bas ou sans transpondeur visible.',true);busy=false;return}
+    if(!list.length){say('Aucun avion repéré dans un rayon de 100 km. Il est peut-être trop bas ou sans transpondeur visible.',true);busy=false;return}
     say('');
     select(list[0].hex,true);
   }catch(e){say(e.name==='AbortError'?'Le réseau répond trop lentement, réessaie.':(e.message||'Erreur réseau.'),true)}
