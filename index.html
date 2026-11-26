@@ -137,7 +137,7 @@ footer a{color:inherit}
     <h2>Les autres avions autour</h2>
     <div id="others"></div>
   </section>
-  <footer>Version 5 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
+  <footer>Version 6 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
 </main>
 <div class="dock" id="dock" hidden><button id="again">J'en entends un autre</button></div>
 
@@ -150,13 +150,12 @@ const RADIUS_NM=54, POLL_MS=8000;
 /* Les API ADS-B publiques n'autorisent pas les appels depuis un navigateur (pas d'en-tête CORS).
    Les requêtes passent donc par un relais. PROXY : adresse de ton Worker Cloudflare (voir worker.js),
    le plus fiable. Sans lui, la page tente des relais publics gratuits, plus lents et parfois saturés. */
-const PROXY='';
+const PROXY='https://la-haut-relais.dorian-lichtenauer.workers.dev';
 const ROUTES=[
   PROXY&&{n:'relais perso',w:u=>PROXY.replace(/\/$/,'')+'/?url='+encodeURIComponent(u)},
+  {n:'relais jina',w:u=>'https://r.jina.ai/'+u},
   {n:'relais codetabs',w:u=>'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u)},
   {n:'relais allorigins',w:u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},
-  {n:'relais corsproxy',w:u=>'https://corsproxy.io/?url='+encodeURIComponent(u)},
-  {n:'relais jina',w:u=>'https://r.jina.ai/'+u},
   {n:'direct',w:u=>u}
 ].filter(Boolean);
 let routeIdx=0;
