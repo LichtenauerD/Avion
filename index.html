@@ -99,6 +99,8 @@ footer a{color:inherit}
       </button>
     </div>
     <p id="msg" role="status"></p>
+    <button class="btn" id="diagBtn" hidden>Lancer un diagnostic</button>
+    <pre id="diag" hidden style="text-align:left;font-size:13px;white-space:pre-wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;max-width:100%"></pre>
     <p class="hint">Un tap, et la page trouve l'avion le plus proche au-dessus de toi, avec sa route et sa compagnie.</p>
   </section>
 
@@ -135,7 +137,7 @@ footer a{color:inherit}
     <h2>Les autres avions autour</h2>
     <div id="others"></div>
   </section>
-  <footer>Version 4 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
+  <footer>Version 5 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
 </main>
 <div class="dock" id="dock" hidden><button id="again">J'en entends un autre</button></div>
 
@@ -154,6 +156,7 @@ const ROUTES=[
   {n:'relais codetabs',w:u=>'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u)},
   {n:'relais allorigins',w:u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u)},
   {n:'relais corsproxy',w:u=>'https://corsproxy.io/?url='+encodeURIComponent(u)},
+  {n:'relais jina',w:u=>'https://r.jina.ai/'+u},
   {n:'direct',w:u=>u}
 ].filter(Boolean);
 let routeIdx=0;
@@ -167,7 +170,8 @@ let me=null, list=[], sel=null, map=null, layers={}, tracks={}, info={}, timer=n
 
 async function raw(url,ms){
   const c=new AbortController(), t=setTimeout(()=>c.abort(),ms);
-  try{const r=await fetch(url,{signal:c.signal,cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return JSON.parse(await r.text())}
+  try{const r=await fetch(url,{signal:c.signal,cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const t=await r.text();
+    try{return JSON.parse(t)}catch(e){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)throw new Error('réponse illisible');return JSON.parse(t.slice(a,b+1))}}
   finally{clearTimeout(t)}
 }
 /* Essaie d'abord le relais qui a marché la dernière fois, puis les autres. */
@@ -239,7 +243,7 @@ async function scan(){
     if(!list.length){say('Aucun avion repéré dans un rayon de 100 km. Il est peut-être trop bas ou sans transpondeur visible.',true);busy=false;return}
     say('');
     select(list[0].hex,true);
-  }catch(e){say(e.name==='AbortError'?'Le réseau répond trop lentement, réessaie.':(e.message||'Erreur réseau.'),true)}
+  }catch(e){say(e.name==='AbortError'?'Le réseau répond trop lentement, réessaie.':(e.message||'Erreur réseau.'),true);$('diagBtn').hidden=!me}
   busy=false;
 }
 
@@ -370,6 +374,17 @@ async function poll(){
   }catch(e){}
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&sel)poll()});
+async function diag(){
+  const out=$('diag'); out.hidden=false; out.textContent='Test de chaque relais, patiente…\n';
+  const u=SOURCES[0].u(me.lat.toFixed(3),me.lon.toFixed(3),RADIUS_NM);
+  for(const r of ROUTES){
+    const t0=performance.now();
+    try{const j=await raw(r.w(u),9000);const n=(j.ac||j.aircraft||[]).length;out.textContent+=`${r.n} : OK, ${n} avions (${Math.round(performance.now()-t0)} ms)\n`}
+    catch(e){out.textContent+=`${r.n} : échec, ${e.name==='AbortError'?'délai dépassé':e.message}\n`}
+  }
+  out.textContent+='Fini. Fais une capture et envoie-la.';
+}
+$('diagBtn').addEventListener('click',diag);
 $('go').addEventListener('click',scan);
 $('again').addEventListener('click',scan);
 }
