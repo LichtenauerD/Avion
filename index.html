@@ -138,7 +138,7 @@ footer a{color:inherit}
     <h2>Les autres avions autour</h2>
     <div id="others"></div>
   </section>
-  <footer>Version 8 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
+  <footer>Version 9 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
 </main>
 <div class="dock" id="dock" hidden><button id="again">J'en entends un autre</button></div>
 
@@ -291,14 +291,21 @@ function phase(a){
   return (a.h>6000)?'En croisière':'En palier';
 }
 function airportName(p){return p?[p.municipality||p.name,p.country_name].filter(Boolean).join(', '):''}
-/* Écart entre l'avion et le trajet annoncé par adsbdb, en km (null si non vérifiable). */
+/* Écart entre l'avion et le trajet annoncé par adsbdb, en km (null si non vérifiable).
+   Si l'avion vole à l'opposé de la destination annoncée, la route est aussi jugée fausse. */
 function offRoute(a,rt){
   const o=rt?.origin,d=rt?.destination;
   if(o?.latitude==null||d?.latitude==null)return null;
   const pts=gc(o.latitude,o.longitude,d.latitude,d.longitude,160);
-  return Math.min(...pts.map(p=>dist(a.lat,a.lon,p[0],p[1])))/1000;
+  let off=Math.min(...pts.map(p=>dist(a.lat,a.lon,p[0],p[1])))/1000;
+  const toDest=dist(a.lat,a.lon,d.latitude,d.longitude)/1000;
+  if(a.track!=null&&toDest>80){
+    const diff=Math.abs(((bearing(a.lat,a.lon,d.latitude,d.longitude)-a.track)+540)%360-180);
+    if(diff>100)off=Math.max(off,999);
+  }
+  return off;
 }
-const ROUTE_TOL_KM=150;
+const ROUTE_TOL_KM=100;
 function renderPlane(a,i){
   const raw=i?.rt, ac=i?.ac, off=offRoute(a,raw), bad=off!=null&&off>ROUTE_TOL_KM, rt=bad?null:raw;
   $('cs').textContent=a.cs||a.r||a.hex.toUpperCase();
@@ -310,7 +317,7 @@ function renderPlane(a,i){
   $('dn').textContent=rt?airportName(rt.destination):'';
   const code=p=>p?.iata_code||p?.icao_code||'?';
   $('rnote').textContent=!i?'Recherche de la route…'
-    :bad?`Route inconnue. La base adsbdb annonce ${code(raw.origin)}–${code(raw.destination)}, mais l'avion est à ${Math.round(off)} km de ce trajet : ce numéro de vol a sans doute changé de route, je l'ignore.`
+    :bad?`Route inconnue. La base adsbdb annonce ${code(raw.origin)}–${code(raw.destination)}, mais ${off>=999?'l\'avion vole dans la direction opposée':'l\'avion est à '+Math.round(off)+' km de ce trajet'} : ce numéro de vol a sans doute changé de route, je l'ignore.`
     :rt?'Route habituelle de ce numéro de vol, d\'après adsbdb (cohérente avec sa position).'
     :'Route non référencée pour ce vol (privé, militaire, cargo ou vol récent).';
   const di=DIRS[Math.round(a.brg/45)%8];
