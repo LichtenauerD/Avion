@@ -99,6 +99,7 @@ footer a{color:inherit}
       </button>
     </div>
     <p id="msg" role="status"></p>
+    <button class="btn" id="farBtn" hidden>Voir quand même le plus proche</button>
     <button class="btn" id="diagBtn" hidden>Lancer un diagnostic</button>
     <pre id="diag" hidden style="text-align:left;font-size:13px;white-space:pre-wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;max-width:100%"></pre>
     <p class="hint">Un tap, et la page trouve l'avion le plus proche au-dessus de toi, avec sa route et sa compagnie.</p>
@@ -137,7 +138,7 @@ footer a{color:inherit}
     <h2>Les autres avions autour</h2>
     <div id="others"></div>
   </section>
-  <footer>Version 6 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
+  <footer>Version 7 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
 </main>
 <div class="dock" id="dock" hidden><button id="again">J'en entends un autre</button></div>
 
@@ -146,7 +147,7 @@ footer a{color:inherit}
 {
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const RADIUS_NM=54, POLL_MS=8000;
+const RADIUS_NM=54, POLL_MS=8000, AUDIBLE_M=25000;
 /* Les API ADS-B publiques n'autorisent pas les appels depuis un navigateur (pas d'en-tête CORS).
    Les requêtes passent donc par un relais. PROXY : adresse de ton Worker Cloudflare (voir worker.js),
    le plus fiable. Sans lui, la page tente des relais publics gratuits, plus lents et parfois saturés. */
@@ -233,13 +234,18 @@ function say(t,err){const m=$('msg');m.textContent=t;m.className=err?'err':''}
 
 async function scan(){
   if(busy)return; busy=true;
-  $('start').hidden=false; $('res').hidden=true; $('dock').hidden=true; stopPoll();
+  $('start').hidden=false; $('res').hidden=true; $('dock').hidden=true; $('farBtn').hidden=true; $('diagBtn').hidden=true; $('diag').hidden=true; stopPoll();
   say('Localisation…');
   try{
     me=await locate();
     say('Je scrute le ciel…');
     list=airborne(await nearby());
     if(!list.length){say('Aucun avion repéré dans un rayon de 100 km. Il est peut-être trop bas ou sans transpondeur visible.',true);busy=false;return}
+    const n=list[0];
+    if(n.slant>AUDIBLE_M){
+      say(`Aucun avion suivi assez près pour être entendu. Le plus proche, ${n.cs||n.r||'un appareil'}, est à ${Math.round(n.d/1000)} km. Ce que tu entends est sans doute un avion militaire, un hélicoptère ou un petit avion sans transpondeur ADS-B.`,true);
+      $('farBtn').hidden=false; busy=false; return;
+    }
     say('');
     select(list[0].hex,true);
   }catch(e){say(e.name==='AbortError'?'Le réseau répond trop lentement, réessaie.':(e.message||'Erreur réseau.'),true);$('diagBtn').hidden=!me}
@@ -384,6 +390,7 @@ async function diag(){
   out.textContent+='Fini. Fais une capture et envoie-la.';
 }
 $('diagBtn').addEventListener('click',diag);
+$('farBtn').addEventListener('click',()=>{if(list.length)select(list[0].hex,true)});
 $('go').addEventListener('click',scan);
 $('again').addEventListener('click',scan);
 }
