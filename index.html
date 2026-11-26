@@ -138,7 +138,7 @@ footer a{color:inherit}
     <h2>Les autres avions autour</h2>
     <div id="others"></div>
   </section>
-  <footer>Version 7 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
+  <footer>Version 8 · Positions : réseau communautaire ADS-B (adsb.lol, adsb.fi, airplanes.live). Routes et appareils : adsbdb.com. Fond de carte © OpenStreetMap, CARTO.</footer>
 </main>
 <div class="dock" id="dock" hidden><button id="again">J'en entends un autre</button></div>
 
@@ -291,16 +291,28 @@ function phase(a){
   return (a.h>6000)?'En croisière':'En palier';
 }
 function airportName(p){return p?[p.municipality||p.name,p.country_name].filter(Boolean).join(', '):''}
+/* Écart entre l'avion et le trajet annoncé par adsbdb, en km (null si non vérifiable). */
+function offRoute(a,rt){
+  const o=rt?.origin,d=rt?.destination;
+  if(o?.latitude==null||d?.latitude==null)return null;
+  const pts=gc(o.latitude,o.longitude,d.latitude,d.longitude,160);
+  return Math.min(...pts.map(p=>dist(a.lat,a.lon,p[0],p[1])))/1000;
+}
+const ROUTE_TOL_KM=150;
 function renderPlane(a,i){
-  const rt=i?.rt, ac=i?.ac;
+  const raw=i?.rt, ac=i?.ac, off=offRoute(a,raw), bad=off!=null&&off>ROUTE_TOL_KM, rt=bad?null:raw;
   $('cs').textContent=a.cs||a.r||a.hex.toUpperCase();
-  $('al').textContent=rt?.airline?.name||ac?.registered_owner||a.ownOp||(i?'Compagnie inconnue':'Recherche de la compagnie…');
+  $('al').textContent=raw?.airline?.name||ac?.registered_owner||a.ownOp||(i?'Compagnie inconnue':'Recherche de la compagnie…');
   $('phase').textContent=phase(a);
   $('oc').textContent=rt?.origin?.iata_code||rt?.origin?.icao_code||'···';
   $('on').textContent=rt?airportName(rt.origin):'';
   $('dc').textContent=rt?.destination?.iata_code||rt?.destination?.icao_code||'···';
   $('dn').textContent=rt?airportName(rt.destination):'';
-  $('rnote').textContent=!i?'Recherche de la route…':rt?'Route habituelle de ce numéro de vol, d\'après adsbdb.':'Route non référencée pour ce vol (privé, militaire, cargo ou vol récent).';
+  const code=p=>p?.iata_code||p?.icao_code||'?';
+  $('rnote').textContent=!i?'Recherche de la route…'
+    :bad?`Route inconnue. La base adsbdb annonce ${code(raw.origin)}–${code(raw.destination)}, mais l'avion est à ${Math.round(off)} km de ce trajet : ce numéro de vol a sans doute changé de route, je l'ignore.`
+    :rt?'Route habituelle de ce numéro de vol, d\'après adsbdb (cohérente avec sa position).'
+    :'Route non référencée pour ce vol (privé, militaire, cargo ou vol récent).';
   const di=DIRS[Math.round(a.brg/45)%8];
   $('lookT').textContent=`Regarde vers le ${di}`;
   $('lookS').textContent=`${Math.round(a.elev)}° au-dessus de l'horizon, à ${(a.d/1000).toFixed(1).replace('.',',')} km`;
@@ -344,8 +356,8 @@ function drawMap(a,i,fit){
     L.control.zoom({position:'bottomright'}).addTo(map);
   }
   Object.values(layers).forEach(l=>l&&map.removeLayer(l)); layers={};
-  const rt=i?.rt;
-  if(rt?.origin?.latitude!=null&&rt?.destination?.latitude!=null){
+  const rt=i?.rt, off=offRoute(a,rt);
+  if((off==null||off<=ROUTE_TOL_KM)&&rt?.origin?.latitude!=null&&rt?.destination?.latitude!=null){
     layers.route=L.polyline(gc(rt.origin.latitude,rt.origin.longitude,rt.destination.latitude,rt.destination.longitude),{color:'#7cc4ff',weight:2,dashArray:'6 8',opacity:.9}).addTo(map);
     layers.o=L.circleMarker([rt.origin.latitude,rt.origin.longitude],{radius:5,color:'#7cc4ff',fillOpacity:1}).bindTooltip(rt.origin.iata_code||rt.origin.icao_code||'').addTo(map);
     layers.d=L.circleMarker([rt.destination.latitude,rt.destination.longitude],{radius:5,color:'#7cc4ff',fillOpacity:1}).bindTooltip(rt.destination.iata_code||rt.destination.icao_code||'').addTo(map);
